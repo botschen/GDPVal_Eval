@@ -120,6 +120,33 @@ prompt = build_task_prompt(
 - **Confidence Intervals**: 95 % CI via bootstrap resampling (1,000 iterations).
 - **Intelligence Index**: `clamp((ELO - 500) / 2000, 0, 1)`.  ELO scores are frozen at the time of a model's addition.
 
+### Evaluating a Sample from the Dataset
+
+```python
+from gdpval.dataset.loader import fetch_sample
+from gdpval.submission.prompt import build_task_prompt
+
+# Fetch the first task from openai/gdpval (requires internet access)
+sample = fetch_sample(offset=0)
+print(sample["task_id"], sample["occupation"])
+
+# Build the task-submission prompt
+prompt = build_task_prompt(
+    task=sample["prompt"],
+    reference_files=sample.get("reference_files") or [],
+)
+```
+
+Or use the CLI entry point to evaluate one sample and write a JSON record:
+
+```bash
+python evaluate.py                        # evaluates offset 0, writes results/sample_evaluation.json
+python evaluate.py --offset 5             # evaluates the 6th task
+python evaluate.py --output my_result.json
+```
+
+A pre-recorded evaluation result is available at [`results/sample_evaluation.json`](results/sample_evaluation.json).
+
 ---
 
 ## Running Tests
