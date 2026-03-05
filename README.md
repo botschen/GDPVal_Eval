@@ -22,6 +22,9 @@ Final ELO scores are computed via a Bradley-Terry model fitted with MLE, bootstr
 
 ```
 gdpval/
+├── agent/
+│   ├── __init__.py        # Package entry point
+│   └── runner.py          # GDPValAgentRunner – Stirrup-based agent harness
 ├── elo/
 │   ├── bradley_terry.py   # Bradley-Terry MLE ELO computation
 │   └── bootstrap.py       # 95 % bootstrapped confidence intervals
@@ -32,7 +35,9 @@ gdpval/
 │   └── normalize.py       # ELO → Intelligence Index normalization
 └── submission/
     └── prompt.py          # Task submission prompt templates & helpers
-tests/                     # pytest test suite (45 tests)
+run_submission.py          # CLI: run one GDPVal task through the Stirrup agent
+evaluate.py                # CLI: build the task prompt without running an agent
+tests/                     # pytest test suite
 ```
 
 ---
@@ -45,7 +50,77 @@ pip install -e ".[dev]"
 
 ---
 
-## Quick Start
+## Task Submission with the Stirrup Agent
+
+The task-submission stage uses [Stirrup](https://github.com/ArtificialAnalysis/Stirrup) as the
+agentic harness.  Each model is given a task and must produce output files using five tools:
+
+| Tool | Stirrup provider | Description |
+|---|---|---|
+| Run Shell | `LocalCodeExecToolProvider` | Execute shell commands in an isolated temp dir |
+| Web Fetch | `WebToolProvider` | Fetch and parse web pages |
+| Web Search | `WebToolProvider` | Search the web (requires `BRAVE_API_KEY`) |
+| View Image | `ViewImageToolProvider` | Load images from the sandbox into context |
+| Finish | `SIMPLE_FINISH_TOOL` | Signal completion and declare output files |
+
+### Running a Task via CLI
+
+```bash
+# Run the first GDPVal task with GPT-4o
+python run_submission.py --model gpt-4o --offset 0
+
+# Use a custom API endpoint (e.g. DeepSeek)
+python run_submission.py --model deepseek-chat \
+    --base-url https://api.deepseek.com --offset 5
+
+# Specify output directory and custom turn limit
+python run_submission.py --model gpt-4o --offset 0 \
+    --output results/submissions/my_run --max-turns 50
+```
+
+Required environment variables:
+
+| Variable | Description |
+|---|---|
+| `OPENAI_API_KEY` or `OPENROUTER_API_KEY` | API key for the LLM provider |
+| `BRAVE_API_KEY` | Brave Search API key (optional; web search is disabled without it) |
+
+### Running Tasks Programmatically
+
+```python
+import asyncio
+from pathlib import Path
+
+from stirrup.clients.chat_completions_client import ChatCompletionsClient
+
+from gdpval.agent.runner import GDPValAgentRunner
+from gdpval.dataset.loader import fetch_sample
+
+# Build the LLM client (OpenAI-compatible)
+client = ChatCompletionsClient(model="gpt-4o")
+
+# Create the runner
+runner = GDPValAgentRunner(client=client, model_name="gpt-4o")
+
+# Fetch one task and run it
+sample = fetch_sample(offset=0)
+result = runner.run_task(sample, output_dir=Path("output/task_0"))
+
+print(result.finish_reason)
+print(result.submitted_paths)
+print(result.token_usage)
+```
+
+For non-OpenAI providers use the `LiteLLMClient` (requires `pip install 'stirrup[litellm]'`):
+
+```python
+from stirrup.clients.litellm_client import LiteLLMClient
+
+client = LiteLLMClient(model_slug="anthropic/claude-opus-4-5")
+runner = GDPValAgentRunner(client=client, model_name="claude-opus-4-5")
+```
+
+---
 
 ### ELO Calculation
 
@@ -161,4 +236,7 @@ pytest tests/ -v
 
 | Variable | Description |
 |---|---|
+| `OPENAI_API_KEY` | OpenAI API key for task submission |
+| `OPENROUTER_API_KEY` | OpenRouter API key (alternative to `OPENAI_API_KEY`) |
+| `BRAVE_API_KEY` | Brave Search API key for web search during task submission |
 | `GEMINI_API_KEY` | Gemini API key for the pairwise grader |
